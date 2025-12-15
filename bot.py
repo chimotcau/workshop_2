@@ -1,5 +1,6 @@
 import random
-from engine_core import WHITE, BLACK, Piece
+from engine_core import WHITE, BLACK
+from config import CAPTURE_WEIGHT, SIZE_WEIGHT, FORWARD_WEIGHT
 
 class SmartBot:
     def __init__(self, color):
@@ -7,37 +8,31 @@ class SmartBot:
 
     def evaluate_move(self, board, move):
         score = 0
-        fr_r, fr_c = move.fr
-        to_r, to_c = move.to
-        piece = board.piece_at(fr_r, fr_c)
+        from_row, from_col = move.start
+        to_row, to_col = move.end
+        piece = board.piece_at(from_row, from_col)
 
-        score += 10 * len(move.captures)
+        score += CAPTURE_WEIGHT * len(move.captures)
 
         if piece:
-            score += piece.size
+            score += SIZE_WEIGHT * piece.size
 
         if piece:
             if self.color == WHITE:
-                score += (fr_r - to_r)
+                score += FORWARD_WEIGHT * (from_row - to_row)
             else:
-                score += (to_r - fr_r)
+                score += FORWARD_WEIGHT * (to_row - from_row)
 
         return score
 
     def choose_move(self, board):
-        all_moves = []
-        for r in range(board.size):
-            for c in range(board.size):
-                p = board.piece_at(r, c)
-                if p and p.color == self.color:
-                    for split in range(1, p.size+1):
-                        all_moves += board._piece_moves(r, c, p, split)
+        all_moves = board.get_all_legal_moves(self.color)
 
         if not all_moves:
             return None
 
-        scored_moves = [(self.evaluate_move(board, m), m) for m in all_moves]
+        scored_moves = [(self.evaluate_move(board, move), move) for move in all_moves]
         max_score = max(score for score, _ in scored_moves)
-        best_moves = [m for score, m in scored_moves if score == max_score]
+        best_moves = [move for score, move in scored_moves if score == max_score]
 
         return random.choice(best_moves)
