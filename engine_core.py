@@ -7,56 +7,58 @@ EMPTY = None
 class Piece:
     def __init__(self, color, size=1):
         self.color = color
-        self.size = size  
+        self.size = size
 
     def __repr__(self):
-        c = "W" if self.color == WHITE else "B"
-        return f"{c}[{self.size}]"
+        color_char = "W" if self.color == WHITE else "B"
+        return f"{color_char}[{self.size}]"
 
 class Move:
-    def __init__(self, fr, to, split=None, captures=None):
-        self.fr = fr      
-        self.to = to      
-        self.split = split  
+    def __init__(self, start, end, split=None, captures=None):
+        self.start = start
+        self.end = end
+        self.split = split
         self.captures = captures or []
 
     def __repr__(self):
-        return f"Move({self.fr}->{self.to}, split={self.split}, caps={self.captures})"
+        return f"Move({self.start}->{self.end}, split={self.split})"
 
 class Board:
     def __init__(self, size=8):
         self.size = size
-        self.grid = [[EMPTY]*size for _ in range(size)]
+        self.grid = [[EMPTY] * size for _ in range(size)]
         self.reset()
 
     def reset(self):
-        self.grid = [[EMPTY]*self.size for _ in range(self.size)]
-
+        board_size = self.size
+        self.grid = [[EMPTY] * board_size for _ in range(board_size)]
         self.grid[0][3] = Piece(BLACK, 12)
         self.grid[7][4] = Piece(WHITE, 12)
 
-    def in_bounds(self, r, c):
-        return 0 <= r < self.size and 0 <= c < self.size
+    def in_bounds(self, row, col):
+        return 0 <= row < self.size and 0 <= col < self.size
 
-    def piece_at(self, r, c):
-        return self.grid[r][c]
+    def piece_at(self, row, col):
+        return self.grid[row][col]
 
     def players_pieces(self, color):
-        return [(r,c) for r in range(self.size) for c in range(self.size)
-                if self.grid[r][c] and self.grid[r][c].color==color]
-
-    def clone(self):
-        return deepcopy(self)
+        positions = []
+        for row in range(self.size):
+            for col in range(self.size):
+                piece = self.grid[row][col]
+                if piece and piece.color == color:
+                    positions.append((row, col))
+        return positions
 
     def get_all_legal_moves(self, color):
         moves = []
-        for r,c in self.players_pieces(color):
-            piece = self.grid[r][c]
-            for split in range(1, piece.size+1):
-                moves.extend(self._piece_moves(r,c,piece,split))
+        for row, col in self.players_pieces(color):
+            piece = self.grid[row][col]
+            for split in range(1, piece.size + 1):
+                moves.extend(self.get_piece_moves(row, col, piece, split))
         return moves
 
-    def _piece_moves(self, r, c, piece, split):
+    def get_piece_moves(self, row, col, piece, split):
         moves = []
         size = split
 
@@ -66,68 +68,74 @@ class Board:
             forward_dirs = [(1, 0), (1, -1), (1, 1)]
 
         all_dirs = [(-1, 0), (1, 0), (0, -1), (0, 1),
-                    (-1, -1), (-1, 1), (1, -1), (1, 1)]
+                   (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
-        def valid_dark(rr, cc):
-            return self.in_bounds(rr, cc) and ((rr + cc) % 2 == 1)
+        def valid_dark(check_row, check_col):
+            return self.in_bounds(check_row, check_col) and ((check_row + check_col) % 2 == 1)
 
-        for dr, dc in forward_dirs:
-            tr = r + dr * size
-            tc = c + dc * size
-            if not self.in_bounds(tr, tc):
-                continue  
-            if not valid_dark(tr, tc):
+        for delta_row, delta_col in forward_dirs:
+            target_row = row + delta_row * size
+            target_col = col + delta_col * size
+            if not self.in_bounds(target_row, target_col):
                 continue
-            dest = self.grid[tr][tc]
-            if dest is None:
-                moves.append(Move((r, c), (tr, tc), split))
-            elif dest.color == piece.color:
-                moves.append(Move((r, c), (tr, tc), split))
-            elif dest.color != piece.color and dest.size <= split:
-                moves.append(Move((r, c), (tr, tc), split, captures=[(tr, tc)]))
-
-        for dr, dc in all_dirs:
-            tr = r + dr * size
-            tc = c + dc * size
-            if not self.in_bounds(tr, tc):
+            if not valid_dark(target_row, target_col):
                 continue
-            dest = self.grid[tr][tc]
-            if dest and dest.color != piece.color and dest.size <= split:
-                moves.append(Move((r, c), (tr, tc), split, captures=[(tr, tc)]))
+            destination = self.grid[target_row][target_col]
+            if destination is None:
+                moves.append(Move((row, col), (target_row, target_col), split))
+            elif destination.color == piece.color:
+                moves.append(Move((row, col), (target_row, target_col), split))
+            elif destination.color != piece.color and destination.size <= split:
+                moves.append(Move((row, col), (target_row, target_col), split,
+                                captures=[(target_row, target_col)]))
+
+        for delta_row, delta_col in all_dirs:
+            target_row = row + delta_row * size
+            target_col = col + delta_col * size
+            if not self.in_bounds(target_row, target_col):
+                continue
+            destination = self.grid[target_row][target_col]
+            if destination and destination.color != piece.color and destination.size <= split:
+                moves.append(Move((row, col), (target_row, target_col), split,
+                                captures=[(target_row, target_col)]))
 
         return moves
 
     def move_piece(self, move):
-        fr = move.fr
-        tr, tc = move.to
-        piece = self.grid[fr[0]][fr[1]]
+        start_row, start_col = move.start
+        target_row, target_col = move.end
+        piece = self.grid[start_row][start_col]
         if not piece:
             return
 
         moving_size = move.split
         piece.size -= moving_size
         if piece.size == 0:
-            self.grid[fr[0]][fr[1]] = EMPTY
+            self.grid[start_row][start_col] = EMPTY
         moving_piece = Piece(piece.color, moving_size)
 
-        for cr, cc in move.captures:
-            if self.in_bounds(cr, cc):
-                self.grid[cr][cc] = EMPTY
+        for capture_row, capture_col in move.captures:
+            if self.in_bounds(capture_row, capture_col):
+                self.grid[capture_row][capture_col] = EMPTY
 
-        dest = self.grid[tr][tc]
-        if dest is None:
-            self.grid[tr][tc] = moving_piece
-        elif dest.color == piece.color:
-            dest.size += moving_piece.size
+        destination = self.grid[target_row][target_col]
+        if destination is None:
+            self.grid[target_row][target_col] = moving_piece
+        elif destination.color == piece.color:
+            destination.size += moving_piece.size
         else:
-            self.grid[tr][tc] = moving_piece
+            self.grid[target_row][target_col] = moving_piece
 
     def is_terminal(self):
-        return not self.players_pieces(WHITE) or not self.players_pieces(BLACK)
+        white_pieces = self.players_pieces(WHITE)
+        black_pieces = self.players_pieces(BLACK)
+        return not white_pieces or not black_pieces
 
     def winner(self):
-        if self.players_pieces(WHITE) and not self.players_pieces(BLACK):
+        white_pieces = self.players_pieces(WHITE)
+        black_pieces = self.players_pieces(BLACK)
+        if white_pieces and not black_pieces:
             return WHITE
-        if self.players_pieces(BLACK) and not self.players_pieces(WHITE):
+        if black_pieces and not white_pieces:
             return BLACK
         return None
